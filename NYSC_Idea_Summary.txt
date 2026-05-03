@@ -1,0 +1,63 @@
+NYSC CORPER CLEARANCE MANAGEMENT SYSTEM
+Project Idea Document
+Lead City University, Ibadan  |  April 2026
+
+1. Background & Problem Statement
+The National Youth Service Corps (NYSC) scheme requires corps members ("corpers") to obtain a monthly clearance letter from their Place of Primary Assignment (PPA) before visiting the Local Government Inspector (LGI) for official clearance. At present, this process is manual — corpers visit the Human Resources (HR) office every month, the HR officer manually prepares the clearance letter on school letterhead, and the corper carries it to the LGI.
+
+Pain points identified at Lead City University:
+•Repetitive manual effort by HR staff to produce identical-format letters every month
+•Corpers may misplace their forms or face delays because documents are not centralised
+•No single dashboard for HR/admin to see all corpers' status, batch, and months remaining
+•Printing on official letterhead requires HR presence and is not scalable
+
+2. Project Vision
+Build a web application that digitises the monthly clearance workflow for corpers deployed to Lead City University — allowing self-service document generation by corpers and bulk professional document printing by HR admin, while maintaining a live registry of all deployed corps members.
+
+3. Core Features
+3.1  Corper Registry
+A database of every corper deployed to the institution, organised by service batch (e.g. 2025A, 2025B, 2025C, 2026A). Each record holds:
+Field	Description / Example
+Full Name	As on call-up letter
+Call-Up Number	NYSC/FUW/2025/291616
+State Code	OY/25C/5371
+Batch	25C, 26A, 26B, etc.
+Service Start Date	Used to auto-calculate months served & remaining
+Deployment Unit/Dept	E.g. Engineering Faculty
+Status	Active / Completed / Withdrawn
+
+3.2  Dual-Login Authentication
+Two distinct user types share a single login page but are routed to different dashboards:
+•Corper Login — Credentials: Call-Up Number + State Code. On success, routes to the Corper Panel.
+•Admin Login — Credentials: Staff ID + Password. On success, routes to the Admin Panel.
+
+3.3  Corper Panel
+•Personal profile card: name, call-up number, state code, batch, months served, months remaining, countdown bar
+•Monthly Clearance Form: auto-filled with corper's data. Corper downloads / prints for supervisor signature, then submits to HR
+•Clearance Letter: generated once HR approves the month. Carries the school letterhead, corper details, and the month being cleared for
+•History log of past clearance months
+
+3.4  Admin / HR Panel
+•Corper Registry Table — filterable by batch, status, months remaining
+•Bulk clearance letter generation — select all corpers or a subset, generate one multi-page Word document or individual documents per corper
+•Approval workflow — HR ticks approval for a corper's current month, which unlocks the clearance letter on the corper's side
+•Batch management — add new batches (26A, 26B …) and migrate completing corpers to 'Alumni'
+•Print queue — one click to send all pending letters to the school letterhead-branded printable format
+
+3.5  Document Generation
+Every generated document pulls from the database and populates a fixed template containing:
+•School letterhead (logo, institution name, address, HR office details)
+•Corper full name, call-up number, state code
+•Month and year the clearance covers
+•Date of approval / date of issue
+•Signature block for the Head of Office / HR
+Output options: (a) single .docx with one page per corper, or (b) individual .docx per corper — both downloadable from the admin panel.
+
+4. User Flow Summary
+Step	Corper Action	HR/Admin Action
+1	Logs in with Call-Up No. + State Code	Logs in with Staff ID + Password
+2	Views dashboard — months served, months left	Views all corpers registry with filters
+3	Downloads/prints clearance FORM for supervisor signature	Receives signed form from corper
+4	Waits for HR approval	Approves month on admin panel — triggers letter generation
+5	Downloads signed clearance LETTER to take to LGI	Optionally prints bulk letters on letterhead for all corpers
+

@@ -1,0 +1,537 @@
+
+NYSC CORPER CLEARANCE MANAGEMENT SYSTEM
+Technical Proposal: Convex Backend + Better Auth Authentication
+File-Based Routing  ·  Custom Credential Auth  ·  Database Design  ·  Implementation Plan
+Lead City University, Ibadan  |  April 2026
+
+1. Executive Summary
+This proposal outlines the revised technical architecture for the NYSC Corper Clearance Management System at Lead City University. It retains the Convex real-time backend introduced in the previous draft but replaces the manual custom session table and bcryptjs/iron-session authentication stack with Better Auth — a TypeScript-first, framework-agnostic authentication library purpose-built for modern Next.js applications.
+
+Better Auth handles the full authentication lifecycle — credential validation, password hashing, session creation, cookie management, and route protection — through a single unified package. This eliminates the need for bcryptjs, iron-session, a custom sessions Convex table, and the hand-rolled /api/auth/login route, reducing both code surface area and security risk.
+
+The system continues to support two distinct user types — corpers (login via NYSC Call-Up Number + State Code) and HR admins (login via Staff ID + Password) — routed to separate dashboards using Next.js file-based routing with route groups and middleware.
+
+2. Why Better Auth Replaces the Previous Auth Stack
+The original proposal used a combination of bcryptjs for hashing, iron-session for signed cookies, and a hand-built sessions table in Convex. While functional, this approach required significant boilerplate and introduced multiple points of potential error — session expiry logic, cookie configuration, token rotation, and manual CSRF handling all had to be implemented from scratch.
+
+Better Auth consolidates all of this into a single, well-tested library. The table below summarises what changes and what is removed:
+
+Concern	Previous Stack	Better Auth Approach
+Password hashing	bcryptjs — manual hash on insert, manual compare on login	Built-in — Better Auth hashes and verifies internally
+Session cookies	iron-session — manual cookie signing and encryption config	Built-in — HttpOnly, Secure, SameSite cookies auto-configured
+Session storage	Custom sessions table in Convex — manual expiry checks	Better Auth manages its own session table via the Convex adapter
+Login API route	Hand-rolled /api/auth/login/route.ts with fetch to Convex	Better Auth mounts its own /api/auth/* handler — one line of config
+Logout	Manual session delete + cookie clear in a custom route	auth.signOut() client call — Better Auth handles server-side cleanup
+CSRF protection	Not implemented in original draft	Built-in CSRF token validation on all mutation endpoints
+Type safety	Manual typing of session payloads	Fully typed session and user objects via TypeScript inference
+Packages removed	—	bcryptjs, @types/bcryptjs, iron-session — all removed
+
+3. Updated Technology Stack
+
+Layer	Technology	Role
+Frontend	Next.js 14 — App Router	UI pages, file-based routing, server components, API routes for .docx
+Language	TypeScript	Used everywhere — frontend, Convex functions, Better Auth config, schemas
+Backend / DB	Convex	Real-time database, server queries & mutations, scheduled jobs
+Auth	Better Auth	Custom credentials for corpers and admins; session management; route guards
+Document Gen	docx (npm)	Generates .docx clearance letters in a Next.js API route
+Styling	Tailwind CSS + shadcn/ui	Component library; professional UI without custom CSS
+Frontend Host	Vercel	Auto-deploy from GitHub; free HTTPS
+Backend Host	Convex Cloud	Managed by Convex; no server to configure
+
+Packages removed from the original proposal: bcryptjs, @types/bcryptjs, iron-session. The custom convex/auth.ts session logic and the sessions Convex table are also removed — Better Auth replaces both.
+
+4. Installation Commands (pnpm)
+
+4.1  Scaffold the Project
+pnpm create next-app@latest nysc-clearance --typescript --tailwind --eslint --app
+cd nysc-clearance
+
+4.2  Convex Backend
+pnpm add convex
+pnpm dlx convex dev   # creates convex/ folder, sets NEXT_PUBLIC_CONVEX_URL in .env.local
+
+4.3  Better Auth
+pnpm add better-auth
+pnpm dlx @better-auth/cli generate   # generates Better Auth schema for Convex
+
+4.4  Document Generation
+pnpm add docx file-saver
+pnpm add -D @types/file-saver
+
+4.5  UI — shadcn/ui + Utilities
+pnpm dlx shadcn@latest init
+pnpm dlx shadcn@latest add button input label table badge card dialog select tabs toast
+
+4.6  Form Handling & Validation
+pnpm add react-hook-form zod @hookform/resolvers
+
+4.7  Date Utilities
+pnpm add date-fns
+
+5. File-Based Routing Structure (Next.js App Router)
+The App Router uses the filesystem as the router. Parenthesised folders are route groups — they define a shared layout and session guard without adding a URL segment. This is how corper and admin routes are cleanly separated without any prefix overlap.
+
+5.1  Complete Folder Structure
+
+nysc-clearance/
++-- app/                               ? Next.js App Router root
+¦   +-- (auth)/                        ? Route group: unauthenticated pages
+¦   ¦   +-- layout.tsx                 ? Redirects to dashboard if already logged in
+¦   ¦   +-- login/
+¦   ¦   ¦   +-- page.tsx               ? Shared login page: corper tab + admin tab
+¦   ¦   +-- signup/
+¦   ¦       +-- page.tsx               ? Admin-only: register a new HR account
+¦   +-- (corper)/                      ? Route group: corper-authenticated pages
+¦   ¦   +-- layout.tsx                 ? Session guard: redirect to /login if not corper
+¦   ¦   +-- dashboard/
+¦   ¦   ¦   +-- page.tsx               ? Profile card, months bar, clearance status
+¦   ¦   +-- clearance/
+¦   ¦       +-- [month]/
+¦   ¦           +-- page.tsx           ? Download form / letter for a specific month
+¦   +-- (admin)/                       ? Route group: admin-authenticated pages
+¦   ¦   +-- layout.tsx                 ? Session guard: redirect to /login if not admin
+¦   ¦   +-- panel/
+¦   ¦   ¦   +-- page.tsx               ? Registry table, filters, batch selector
+¦   ¦   +-- corpers/
+¦   ¦   ¦   +-- new/page.tsx           ? Add new corper to registry
+¦   ¦   ¦   +-- [id]/page.tsx          ? Edit corper profile
+¦   ¦   +-- generate/
+¦   ¦       +-- page.tsx               ? Bulk document generation & print queue
+¦   +-- api/
+¦       +-- auth/
+¦       ¦   +-- [...all]/
+¦       ¦       +-- route.ts           ? Better Auth catch-all handler (single file)
+¦       +-- documents/
+¦           +-- generate/
+¦               +-- route.ts           ? POST: generates .docx, streams to client
++-- convex/                            ? Convex backend (deployed to Convex Cloud)
+¦   +-- schema.ts                      ? Database table definitions
+¦   +-- corpers.ts                     ? Corper CRUD queries & mutations
+¦   +-- clearance.ts                   ? Clearance approval mutations
+¦   +-- _generated/                   ? Auto-generated by Convex CLI (do not edit)
++-- lib/
+¦   +-- auth.ts                        ? Better Auth server instance (single source of truth)
+¦   +-- auth-client.ts                 ? Better Auth browser client
+¦   +-- docx-templates.ts              ? Clearance form & letter templates
++-- components/                        ? Shared React components
++-- middleware.ts                      ? Route protection using Better Auth session
++-- public/
+¦   +-- letterhead.png                 ? School letterhead image for documents
++-- package.json
+
+6. Better Auth Configuration
+All Better Auth configuration lives in a single file: lib/auth.ts. This is the server-side instance that defines credential providers, the Convex database adapter, session settings, and the two user roles. Everything else in the application imports from this file.
+
+6.1  Server Auth Instance (lib/auth.ts)
+
+// lib/auth.ts
+import { betterAuth } from 'better-auth'
+import { convexAdapter } from 'better-auth/adapters/convex'
+import { credentials } from 'better-auth/plugins'
+import { convex } from '@/lib/convex'   // Convex client for server use
+
+export const auth = betterAuth({
+  database: convexAdapter(convex),       // stores sessions & users in Convex
+
+  plugins: [
+    credentials({
+      // -- Corper login: Call-Up Number + State Code --------------
+      async authorize(credentials) {
+        const { callUpNumber, stateCode } = credentials
+        if (!callUpNumber || !stateCode) return null
+
+        const corper = await convex.query(api.corpers.findByCallUp, {
+          callUpNumber: String(callUpNumber),
+        })
+
+        if (!corper) return null
+        if (corper.stateCode.trim().toLowerCase() !==
+            String(stateCode).trim().toLowerCase()) return null
+        if (corper.status !== 'active') return null
+
+        return {
+          id: corper._id,
+          name: corper.fullName,
+          role: 'corper',           // attached to session
+          callUpNumber: corper.callUpNumber,
+          stateCode: corper.stateCode,
+        }
+      },
+    }),
+  ],
+
+  session: {
+    expiresIn: 60 * 60 * 24 * 7,   // 7 days
+    cookieCache: { enabled: true, maxAge: 60 * 5 },
+  },
+
+  // Admin login uses the built-in email/password flow
+  // staffId is stored in the 'email' field for schema compatibility
+  emailAndPassword: { enabled: true },
+})
+
+Note: Better Auth handles all password hashing internally using Argon2id. No bcryptjs import is needed anywhere in the codebase.
+
+6.2  Browser Auth Client (lib/auth-client.ts)
+
+// lib/auth-client.ts
+import { createAuthClient } from 'better-auth/react'
+
+export const authClient = createAuthClient({
+  baseURL: process.env.NEXT_PUBLIC_APP_URL,  // e.g. http://localhost:3000
+})
+
+// Named exports used throughout the frontend
+export const { signIn, signOut, signUp, useSession } = authClient
+
+6.3  Better Auth API Route — Catch-All Handler
+Better Auth mounts all of its own endpoints (/api/auth/sign-in, /api/auth/sign-out, /api/auth/session, etc.) through a single catch-all route file. No individual route files are needed for login, logout, or session refresh.
+
+// app/api/auth/[...all]/route.ts
+import { auth } from '@/lib/auth'
+import { toNextJsHandler } from 'better-auth/next-js'
+
+export const { GET, POST } = toNextJsHandler(auth)
+
+This single file replaces the entire app/api/auth/login/route.ts and app/api/auth/logout/route.ts that were present in the original proposal.
+
+7. Login & Signup Pages
+7.1  Login Page — Two-Tab Form (app/(auth)/login/page.tsx)
+The single login page renders two tabs — one for corpers and one for HR admins. Both call Better Auth's signIn.credentials() method, which posts to /api/auth/sign-in/credentials automatically. On success, Better Auth sets an HttpOnly session cookie and the client redirects to the appropriate dashboard based on the role attached to the session.
+
+// app/(auth)/login/page.tsx
+'use client'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { signIn } from '@/lib/auth-client'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+
+export default function LoginPage() {
+  const router = useRouter()
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  // -- Corper login: Call-Up Number + State Code -----------------
+  async function handleCorperLogin(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setLoading(true); setError('')
+    const fd = new FormData(e.currentTarget)
+
+    const { error } = await signIn.credentials({
+      callUpNumber: fd.get('callUpNumber') as string,
+      stateCode:    fd.get('stateCode')    as string,
+    })
+
+    if (error) { setError(error.message); setLoading(false); return }
+    router.push('/dashboard')
+  }
+
+  // -- Admin login: Staff ID + Password --------------------------
+  async function handleAdminLogin(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setLoading(true); setError('')
+    const fd = new FormData(e.currentTarget)
+
+    const { error } = await signIn.email({
+      email:    fd.get('staffId')   as string,  // staffId stored as email
+      password: fd.get('password')  as string,
+    })
+
+    if (error) { setError(error.message); setLoading(false); return }
+    router.push('/panel')
+  }
+
+  return (
+    <div className='min-h-screen flex items-center justify-center bg-slate-50'>
+      <div className='w-full max-w-md p-8 bg-white rounded-2xl shadow-lg'>
+        <h1 className='text-2xl font-bold text-center mb-6 text-[#1F4E79]'>
+          NYSC Clearance Portal
+        </h1>
+        <Tabs defaultValue='corper'>
+          <TabsList className='grid grid-cols-2 mb-6'>
+            <TabsTrigger value='corper'>Corps Member</TabsTrigger>
+            <TabsTrigger value='admin'>HR / Admin</TabsTrigger>
+          </TabsList>
+
+          {/* -- Corper Tab --------------------------------------- */}
+          <TabsContent value='corper'>
+            <form onSubmit={handleCorperLogin} className='space-y-4'>
+              <div>
+                <Label htmlFor='callUpNumber'>Call-Up Number</Label>
+                <Input name='callUpNumber' placeholder='NYSC/FUW/2025/291616' />
+              </div>
+              <div>
+                <Label htmlFor='stateCode'>State Code</Label>
+                <Input name='stateCode' placeholder='OY/25C/5371' />
+              </div>
+              {error && <p className='text-red-500 text-sm'>{error}</p>}
+              <Button type='submit' className='w-full' disabled={loading}>
+                {loading ? 'Signing in...' : 'Sign In'}
+              </Button>
+            </form>
+          </TabsContent>
+
+          {/* -- Admin Tab ---------------------------------------- */}
+          <TabsContent value='admin'>
+            <form onSubmit={handleAdminLogin} className='space-y-4'>
+              <div>
+                <Label htmlFor='staffId'>Staff ID</Label>
+                <Input name='staffId' placeholder='LCU/HR/001' />
+              </div>
+              <div>
+                <Label htmlFor='password'>Password</Label>
+                <Input name='password' type='password' />
+              </div>
+              {error && <p className='text-red-500 text-sm'>{error}</p>}
+              <Button type='submit' className='w-full' disabled={loading}>
+                {loading ? 'Signing in...' : 'Sign In'}
+              </Button>
+            </form>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  )
+}
+
+7.2  Admin Signup Page — Register HR Account (app/(auth)/signup/page.tsx)
+Corpers do not self-register — they are added to the registry by HR admin. Only admin accounts need a signup page, and this page should be accessible only to a superadmin (enforced in middleware). It uses Better Auth's signUp.email() method with the staffId stored in the email field.
+
+// app/(auth)/signup/page.tsx
+'use client'
+import { useRouter } from 'next/navigation'
+import { signUp } from '@/lib/auth-client'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+
+export default function SignupPage() {
+  const router = useRouter()
+
+  async function handleSignup(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+
+    const { error } = await signUp.email({
+      email:    fd.get('staffId')      as string,  // staffId as email identifier
+      password: fd.get('password')     as string,
+      name:     fd.get('displayName')  as string,
+    })
+
+    if (error) { alert(error.message); return }
+    router.push('/panel')
+  }
+
+  return (
+    <div className='min-h-screen flex items-center justify-center bg-slate-50'>
+      <div className='w-full max-w-md p-8 bg-white rounded-2xl shadow-lg'>
+        <h1 className='text-xl font-bold mb-6 text-[#1F4E79]'>Register HR Account</h1>
+        <form onSubmit={handleSignup} className='space-y-4'>
+          <div>
+            <Label>Staff ID</Label>
+            <Input name='staffId' placeholder='LCU/HR/001' />
+          </div>
+          <div>
+            <Label>Display Name</Label>
+            <Input name='displayName' placeholder='Mrs. Adeyemi' />
+          </div>
+          <div>
+            <Label>Password</Label>
+            <Input name='password' type='password' />
+          </div>
+          <Button type='submit' className='w-full'>Create Account</Button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+8. Route Protection with Middleware
+Next.js middleware runs on every matched request before the page renders. Better Auth exposes an auth.api.getSession() server-side helper that reads the session cookie and returns the session object. The middleware uses this to enforce role-based access control across all protected routes.
+
+8.1  middleware.ts
+
+// middleware.ts  (project root — runs on Edge Runtime)
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+
+export async function middleware(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: req.headers })
+  const path    = req.nextUrl.pathname
+
+  // No session ? redirect to login for all protected routes
+  if (!session) {
+    return NextResponse.redirect(new URL('/login', req.url))
+  }
+
+  const role = session.user.role   // 'corper' | 'admin' — set in auth.ts authorize()
+
+  // Corpers cannot access admin routes
+  if (path.startsWith('/panel') && role !== 'admin') {
+    return NextResponse.redirect(new URL('/dashboard', req.url))
+  }
+
+  // Admins cannot access corper routes
+  if (path.startsWith('/dashboard') && role !== 'corper') {
+    return NextResponse.redirect(new URL('/panel', req.url))
+  }
+
+  // Signup page: only superadmin may access
+  if (path.startsWith('/signup') && role !== 'superadmin') {
+    return NextResponse.redirect(new URL('/login', req.url))
+  }
+
+  return NextResponse.next()
+}
+
+export const config = {
+  matcher: ['/dashboard/:path*', '/panel/:path*', '/clearance/:path*', '/signup'],
+}
+
+8.2  Layout-Level Session Guards
+Each route group's layout.tsx adds a secondary server-side guard. This is belt-and-braces protection — the middleware handles the redirect, but the layout guard ensures the page never renders stale data if the session expires mid-navigation.
+
+// app/(corper)/layout.tsx
+import { auth } from '@/lib/auth'
+import { headers } from 'next/headers'
+import { redirect } from 'next/navigation'
+
+export default async function CorperLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth.api.getSession({ headers: headers() })
+  if (!session || session.user.role !== 'corper') redirect('/login')
+  return <>{children}</>
+}
+
+9. Convex Database Schema (convex/schema.ts)
+The sessions table from the original proposal is removed — Better Auth manages its own session storage internally via the Convex adapter. The corpers, clearanceRecords, and admins tables remain unchanged in structure.
+
+9.1  Corpers Table
+corpers: defineTable({
+  callUpNumber:   v.string(),   // 'NYSC/FUW/2025/291616' — login credential
+  stateCode:      v.string(),   // 'OY/25C/5371' — second factor
+  fullName:       v.string(),
+  email:          v.string(),   // optional contact email
+  batch:          v.string(),   // '25A' | '25B' | '25C' | '26A' ...
+  serviceStart:   v.string(),   // ISO date string 'YYYY-MM-DD'
+  deploymentUnit: v.string(),
+  status: v.union(v.literal('active'), v.literal('completed'), v.literal('withdrawn')),
+  createdAt: v.number(),
+})
+  .index('by_callUp',  ['callUpNumber'])
+  .index('by_batch',   ['batch'])
+  .index('by_status',  ['status']),
+
+9.2  ClearanceRecords Table
+clearanceRecords: defineTable({
+  corperId:    v.id('corpers'),
+  monthYear:   v.string(),          // '2026-04'
+  approved:    v.boolean(),
+  approvedBy:  v.optional(v.string()),  // Better Auth user ID of the admin
+  approvedAt:  v.optional(v.number()),
+  documentUrl: v.optional(v.string()),
+})
+  .index('by_corper',       ['corperId'])
+  .index('by_corper_month', ['corperId', 'monthYear']),
+
+The admins table from the original proposal is also removed. Better Auth stores admin accounts in its own managed user table (generated by pnpm dlx @better-auth/cli generate). The role field is stored as a custom field on the Better Auth user object and synced via the Convex adapter.
+
+10. Logout
+Logout is a single client-side call. Better Auth invalidates the server-side session and clears the cookie automatically — no custom API route required.
+
+// In any component, e.g. a NavBar
+import { signOut } from '@/lib/auth-client'
+import { useRouter } from 'next/navigation'
+
+function LogoutButton() {
+  const router = useRouter()
+  return (
+    <button onClick={async () => {
+      await signOut()
+      router.push('/login')
+    }}>
+      Sign Out
+    </button>
+  )
+}
+
+11. Accessing Session Data in Pages
+11.1  Server Components (recommended)
+// app/(corper)/dashboard/page.tsx
+import { auth } from '@/lib/auth'
+import { headers } from 'next/headers'
+
+export default async function DashboardPage() {
+  const session = await auth.api.getSession({ headers: headers() })
+  const corper  = session!.user   // typed — includes role, callUpNumber, etc.
+  // ... render dashboard with corper data
+}
+
+11.2  Client Components
+// Any 'use client' component
+import { useSession } from '@/lib/auth-client'
+
+export function ProfileCard() {
+  const { data: session, isPending } = useSession()
+  if (isPending) return <Spinner />
+  return <p>Welcome, {session?.user.name}</p>
+}
+
+12. Constraints & Risk Mitigation
+
+Constraint	Risk	Mitigation
+Institutional letterhead	Auto-generated documents without sign-off could be misused	Obtain written authorisation from LCU registry before go-live
+Credential sensitivity	Call-up numbers and state codes are official NYSC identifiers	HTTPS mandatory; HttpOnly cookies via Better Auth; no credentials logged; rate-limit sign-in endpoint
+Better Auth Convex adapter	Adapter is relatively new — edge cases may surface	Pin to a stable Better Auth version; review adapter changelog before upgrades
+Corper role in session	Better Auth's default user model may not expose custom fields	Use Better Auth's additionalFields config to surface role, callUpNumber, stateCode on the session object
+Convex free tier	1M function calls/month, 1GB storage	Sufficient for ~100 corpers. Monitor dashboard; upgrade ($25/mo) only if exceeded
+Internet dependency	Unreliable connectivity at PPA	Next.js static generation for low-data views; PWA offline mode in a later version
+Post-service handover	System unmaintained after developer finishes service	Full GitHub repo + README; admin credentials in Convex dashboard; handover doc prepared in advance
+
+13. Implementation Plan
+
+Phase	Duration	Deliverables
+1 — Discovery	Week 1	Obtain clearance letter template, letterhead assets, written HR authorisation; map corper data fields
+2 — Scaffold & Schema	Week 2	Next.js + Convex init; Tailwind + shadcn/ui; Better Auth install + generate; convex/schema.ts; deploy dev environment
+3 — Authentication	Weeks 3–4	lib/auth.ts config; login page (two tabs); signup page; middleware; layout guards; logout; end-to-end session test
+4 — Corper Panel	Weeks 5–6	Dashboard (months bar, clearance history); clearance form download; real-time Convex query subscription
+5 — Admin Panel	Weeks 6–7	Registry table with filters; add/edit corper; batch selector; approval action (Convex atomic mutation)
+6 — Document Generation	Week 8	Clearance form template; clearance letter template; single + bulk .docx; letterhead image; print test on letterhead paper
+7 — Security & Testing	Week 9	Rate-limit sign-in route; input validation (zod); end-to-end test with real corper data; security audit
+8 — Handover	Week 10	Production deploy (Vercel + Convex Cloud); staff training; GitHub README; admin credential handover to institution
+
+14. Getting Started — Full Setup Command Reference
+
+# 1. Create Next.js project
+pnpm create next-app@latest nysc-clearance --typescript --tailwind --eslint --app
+cd nysc-clearance
+
+# 2. Convex backend
+pnpm add convex
+pnpm dlx convex dev
+
+# 3. Better Auth (replaces bcryptjs + iron-session + custom session table)
+pnpm add better-auth
+pnpm dlx @better-auth/cli generate
+
+# 4. Document generation
+pnpm add docx file-saver
+pnpm add -D @types/file-saver
+
+# 5. UI components
+pnpm dlx shadcn@latest init
+pnpm dlx shadcn@latest add button input label table badge card dialog select tabs toast
+
+# 6. Form handling & validation
+pnpm add react-hook-form zod @hookform/resolvers
+
+# 7. Date utilities
+pnpm add date-fns
+
+# 8. Run both dev servers (two terminals)
+pnpm dlx convex dev          # Terminal 1 — Convex backend
+pnpm run dev                 # Terminal 2 — Next.js frontend
+
+NYSC Clearance Management System  ·  Convex + Better Auth Technical Proposal  ·  Lead City University  ·  April 2026
