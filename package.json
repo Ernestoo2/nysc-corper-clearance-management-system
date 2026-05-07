@@ -12,7 +12,6 @@
   "dependencies": {
     "@convex-dev/better-auth": "^0.11.4",
     "@hookform/resolvers": "^5.2.2",
-    "bcryptjs": "^3.0.3",
     "better-auth": "^1.5.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -22,7 +21,6 @@
     "file-saver": "^2.0.5",
     "lucide-react": "^1.8.0",
     "next": "16.2.4",
-    "next-auth": "5.0.0-beta.31",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
@@ -36,7 +34,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/bcryptjs": "^3.0.0",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^20",
     "@types/react": "^19",

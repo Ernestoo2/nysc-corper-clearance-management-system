@@ -8,6 +8,10 @@ import { Label } from '@/components/ui/label'
 import { signIn } from '@/lib/auth-client'
 import { adminLoginSchema, corperLoginSchema } from '@/lib/schemas/auth'
 
+function staffIdToEmail(staffId: string) {
+    return `${staffId.replace(/[^A-Z0-9]+/g, '.').toLowerCase()}@admin.local`
+}
+
 export default function LoginPage() {
     const router = useRouter()
     const [error, setError] = useState('')
@@ -32,20 +36,18 @@ export default function LoginPage() {
         }
 
         const { callUpNumber, stateCode } = parsed.data
-        const response = await fetch('/api/auth/sign-in/corper', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ callUpNumber, stateCode }),
+        const { error } = await signIn.username({
+            username: callUpNumber,
+            password: stateCode,
         })
 
-        if (!response.ok) {
-            const payload = await response.json().catch(() => ({ error: 'Unable to sign in' }))
-            setError(payload.error ?? payload.message ?? 'Unable to sign in')
+        if (error) {
+            setError(error.message ?? 'Unable to sign in')
             setLoading(false)
             return
         }
 
-        router.push(`/corper/${encodeURIComponent(callUpNumber)}`)
+        router.push('/dashboard')
     }
 
     async function handleAdminLogin(e: React.FormEvent<HTMLFormElement>) {
@@ -67,7 +69,7 @@ export default function LoginPage() {
 
         const { staffId, password } = parsed.data
         const { error } = await signIn.email({
-            email: staffId,
+            email: staffIdToEmail(staffId),
             password,
         })
 

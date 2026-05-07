@@ -1,10 +1,44 @@
 import React from "react";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
-export default function AuthLayout({
+type SessionPayload = {
+  user?: {
+    role?: string;
+    username?: string;
+  };
+};
+
+async function resolveSessionRole() {
+  try {
+    const h = await headers();
+    const host = h.get("host");
+    if (!host) return undefined;
+    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
+    const response = await fetch(`${protocol}://${host}/api/auth/get-session`, {
+      headers: { cookie: h.get("cookie") ?? "" },
+      cache: "no-store",
+    });
+    if (!response.ok) return undefined;
+    const payload = (await response.json()) as SessionPayload | null;
+    if (!payload?.user) return undefined;
+    if (payload.user.role === "corper" || payload.user.role === "admin") return payload.user.role;
+    if (payload.user.username?.toUpperCase().startsWith("NYSC/")) return "corper";
+    return "admin";
+  } catch {
+    return undefined;
+  }
+}
+
+export default async function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const role = await resolveSessionRole();
+  if (role === "corper") redirect("/dashboard");
+  if (role === "admin") redirect("/panel");
+
   return <>{children}</>;
 }
 

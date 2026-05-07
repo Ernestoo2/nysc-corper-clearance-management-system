@@ -7,7 +7,13 @@ import { betterAuth } from "better-auth/minimal";
 import { username } from "better-auth/plugins/username";
 import authConfig from "./auth.config";
 
-const processEnv = (globalThis as any).process?.env as Record<string, string | undefined> | undefined;
+type GlobalWithProcess = typeof globalThis & {
+  process?: {
+    env?: Record<string, string | undefined>;
+  };
+};
+
+const processEnv = (globalThis as GlobalWithProcess).process?.env;
 const siteUrl = processEnv?.NEXT_PUBLIC_CONVEX_SITE_URL ?? processEnv?.CONVEX_SITE_URL ?? processEnv?.SITE_URL ?? processEnv?.NEXT_PUBLIC_SITE_URL;
 const appUrl = processEnv?.NEXT_PUBLIC_APP_URL ?? processEnv?.APP_URL ?? processEnv?.NEXT_PUBLIC_SITE_URL ?? processEnv?.SITE_URL;
 const fallbackLocalUrl = processEnv?.NODE_ENV !== "production" ? "http://localhost:3000" : undefined;
@@ -28,7 +34,7 @@ if (processEnv?.NODE_ENV !== "production") {
 
 // The component client has methods needed for integrating Convex with Better Auth,
 // as well as helper methods for general use.
-const authComponentApi = (components as any).betterAuth;
+const authComponentApi = components.betterAuth;
 export const authComponent = createClient<DataModel>(authComponentApi);
 
 export const createAuth = (ctx: GenericCtx<DataModel>) => {

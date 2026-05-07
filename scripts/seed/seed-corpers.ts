@@ -73,7 +73,7 @@ async function main() {
     const csvPath = getCsvPathFromArgs()
     if (!fs.existsSync(csvPath)) {
         throw new Error(`Could not find mock data CSV at ${csvPath}`)
-    }
+    } 
 
     const csvText = fs.readFileSync(csvPath, 'utf-8')
     const forceActive = process.argv.includes('--force-active') || process.argv.includes('--active')
@@ -93,7 +93,6 @@ async function main() {
     const seedCorpersFn = makeFunctionReference<'mutation'>('corpers:seedCorpers')
     const result = await client.mutation(seedCorpersFn, { corpers })
 
-    console.log(`Seed completed: inserted ${result.inserted ?? corpers.length} corpers.`)
 }
 
 main().catch((error) => {

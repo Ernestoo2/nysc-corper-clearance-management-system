@@ -9,6 +9,12 @@ if (!convexUrl) {
 
 const convex = new ConvexHttpClient(convexUrl);
 
+type ProvisionCorper = {
+    callUpNumber: string;
+    fullName: string;
+    stateCode: string;
+};
+
 function getCorperEmail(callUpNumber: string) {
     return `${callUpNumber.replace(/[^A-Z0-9]+/g, ".").toLowerCase()}@corper.local`;
 }
@@ -22,7 +28,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Unable to fetch corpers" }, { status: 502 });
     }
 
-    const allCorpers = Array.isArray(corpers) ? corpers : [];
+    const allCorpers: ProvisionCorper[] = Array.isArray(corpers) ? (corpers as ProvisionCorper[]) : [];
 
     if (allCorpers.length === 0) {
         return NextResponse.json({ message: "No corpers found to provision." });
@@ -30,7 +36,7 @@ export async function POST(req: NextRequest) {
 
     const origin = new URL(req.url).origin;
     const signUpUrl = new URL("/api/auth/sign-up/email", req.url);
-    const results = await Promise.all(allCorpers.map(async (corper: any) => {
+    const results = await Promise.all(allCorpers.map(async (corper) => {
         const email = getCorperEmail(corper.callUpNumber);
         const response = await fetch(signUpUrl.toString(), {
             method: "POST",
