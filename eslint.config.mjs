@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Convex generated files include blanket disables and should not be linted.
+    "convex/_generated/**",
   ]),
 ]);
 

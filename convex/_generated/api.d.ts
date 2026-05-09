@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as corperAudit from "../corperAudit.js";
 import type * as corpers from "../corpers.js";
 import type * as http from "../http.js";
 
@@ -20,6 +21,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  corperAudit: typeof corperAudit;
   corpers: typeof corpers;
   http: typeof http;
 }>;

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function AdminPanel() {
     return (
         <div className="min-h-screen bg-slate-50 p-8">
@@ -7,20 +9,20 @@ export default function AdminPanel() {
                 </h1>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div className="bg-white p-6 rounded-lg shadow-sm border">
+                    <Link href="/panel/corpers" className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
                         <h2 className="text-xl font-semibold mb-4">Corpers</h2>
                         <p className="text-gray-600">Manage corps members</p>
-                    </div>
+                    </Link>
 
-                    <div className="bg-white p-6 rounded-lg shadow-sm border">
+                    <Link href="/panel/clearance" className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
                         <h2 className="text-xl font-semibold mb-4">Clearance</h2>
-                        <p className="text-gray-600">Process clearances</p>
-                    </div>
+                        <p className="text-gray-600">Bulk monthly clearance generation</p>
+                    </Link>
 
-                    <div className="bg-white p-6 rounded-lg shadow-sm border">
+                    <Link href="/panel/reports" className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
                         <h2 className="text-xl font-semibold mb-4">Reports</h2>
-                        <p className="text-gray-600">Generate reports</p>
-                    </div>
+                        <p className="text-gray-600">Generate registry and summary reports</p>
+                    </Link>
 
                     <div className="bg-white p-6 rounded-lg shadow-sm border">
                         <h2 className="text-xl font-semibold mb-4">Settings</h2>

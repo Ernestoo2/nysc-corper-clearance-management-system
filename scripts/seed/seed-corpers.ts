@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { ConvexHttpClient } from 'convex/browser'
-import { makeFunctionReference } from 'convex/server'
+import { api } from '../../convex/_generated/api'
 
 function loadDotEnv(filePath: string) {
     if (!fs.existsSync(filePath)) return
@@ -90,8 +90,19 @@ async function main() {
     }
 
     const client = new ConvexHttpClient(convexUrl)
-    const seedCorpersFn = makeFunctionReference<'mutation'>('corpers:seedCorpers')
-    const result = await client.mutation(seedCorpersFn, { corpers })
+    const batchSizeRaw = process.env.SEED_BATCH_SIZE
+    // Keep this small by default so we don't hit Convex transaction read/write limits.
+    const batchSize = Math.max(1, Number.parseInt(batchSizeRaw ?? '50', 10) || 50)
+    console.log(`Seeding ${corpers.length} corpers in batches of ${batchSize}...`)
+
+    for (let i = 0; i < corpers.length; i += batchSize) {
+        const batch = corpers.slice(i, i + batchSize)
+        const result = await client.mutation(api.corpers.seedCorpers, { corpers: batch })
+        console.log(
+            `Seeded ${Math.min(i + batch.length, corpers.length)}/${corpers.length} corpers`,
+            result
+        )
+    }
 
 }
 

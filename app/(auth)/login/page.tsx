@@ -2,6 +2,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -123,6 +124,12 @@ export default function LoginPage() {
                         <Button type='submit' className='w-full' disabled={loading}>
                             {loading ? 'Signing in...' : 'Sign In'}
                         </Button>
+                        <p className='text-sm text-slate-600 text-center'>
+                            New corper?{' '}
+                            <Link href='/corper-signup' className='font-semibold text-[#1F4E79] hover:underline'>
+                                Create an account
+                            </Link>
+                        </p>
                     </form>
                 )}
 
@@ -141,6 +148,12 @@ export default function LoginPage() {
                         <Button type='submit' className='w-full' disabled={loading}>
                             {loading ? 'Signing in...' : 'Sign In'}
                         </Button>
+                        <p className='text-sm text-slate-600 text-center'>
+                            New admin?{' '}
+                            <Link href='/admin-signup' className='font-semibold text-[#1F4E79] hover:underline'>
+                                Create an account
+                            </Link>
+                        </p>
                     </form>
                 )}
             </div>

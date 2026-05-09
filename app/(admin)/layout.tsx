@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { LogoutButton } from "./logout-button";
 
 type SessionPayload = {
   user?: {
@@ -32,5 +33,15 @@ async function getRole() {
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const role = await getRole();
   if (role !== "admin") redirect("/login");
-  return <>{children}</>;
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="text-sm font-semibold text-slate-700">Admin Panel</div>
+          <LogoutButton />
+        </div>
+      </header>
+      <main>{children}</main>
+    </div>
+  );
 }
