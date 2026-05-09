@@ -16,17 +16,20 @@ type GlobalWithProcess = typeof globalThis & {
 const processEnv = (globalThis as GlobalWithProcess).process?.env;
 const siteUrl = processEnv?.NEXT_PUBLIC_CONVEX_SITE_URL ?? processEnv?.CONVEX_SITE_URL ?? processEnv?.SITE_URL ?? processEnv?.NEXT_PUBLIC_SITE_URL;
 const appUrl = processEnv?.NEXT_PUBLIC_APP_URL ?? processEnv?.APP_URL ?? processEnv?.NEXT_PUBLIC_SITE_URL ?? processEnv?.SITE_URL;
+const vercelUrlRaw = processEnv?.VERCEL_URL ?? processEnv?.NEXT_PUBLIC_VERCEL_URL;
+const vercelUrl = vercelUrlRaw ? `https://${vercelUrlRaw}` : undefined;
 const fallbackLocalUrl = processEnv?.NODE_ENV !== "production" ? "http://localhost:3000" : undefined;
-const baseURL = appUrl ?? siteUrl ?? fallbackLocalUrl;
+const baseURL = appUrl ?? siteUrl ?? vercelUrl ?? fallbackLocalUrl;
 if (!baseURL) {
   throw new Error(
-    "Missing NEXT_PUBLIC_APP_URL, APP_URL, NEXT_PUBLIC_CONVEX_SITE_URL, CONVEX_SITE_URL, SITE_URL, or NEXT_PUBLIC_SITE_URL environment variable in convex/auth.ts"
+    "Missing NEXT_PUBLIC_APP_URL, APP_URL, NEXT_PUBLIC_CONVEX_SITE_URL, CONVEX_SITE_URL, SITE_URL, NEXT_PUBLIC_SITE_URL, or VERCEL_URL environment variable in convex/auth.ts"
   );
 }
 
 const trustedOrigins = new Set<string>([baseURL]);
 if (siteUrl) trustedOrigins.add(siteUrl);
 if (appUrl) trustedOrigins.add(appUrl);
+if (vercelUrl) trustedOrigins.add(vercelUrl);
 if (processEnv?.NODE_ENV !== "production") {
   trustedOrigins.add("http://localhost:3000");
   trustedOrigins.add("http://127.0.0.1:3000");
