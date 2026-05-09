@@ -15,8 +15,16 @@ function formatPublishedAt(value: number | undefined) {
 
 export default function CorperDashboard() {
   const { data: session } = useSession();
-  const normalizedRole = String(session?.user?.role ?? "").trim().toLowerCase();
-  const callUpCandidate = String(session?.user?.username ?? session?.user?.name ?? "").trim().toUpperCase();
+  const sessionUser = session?.user as Record<string, unknown> | undefined;
+  const normalizedRole =
+    typeof sessionUser?.role === "string" ? sessionUser.role.trim().toLowerCase() : "";
+  const callUpCandidate = String(
+    (typeof sessionUser?.username === "string" ? sessionUser.username : undefined) ??
+      session?.user?.name ??
+      ""
+  )
+    .trim()
+    .toUpperCase();
   const isCorper = normalizedRole === "corper" || callUpCandidate.startsWith("NYSC/");
   const callUpNumber = callUpCandidate || "Corper";
   const clearanceContext = useQuery(api.corpers.getMyClearanceContext, {});
