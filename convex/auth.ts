@@ -106,6 +106,80 @@ if (processEnv?.DEBUG_AUTH_ORIGINS === "1") {
   console.log("Auth trustedOrigins:", trustedOriginsList);
 }
 
+/** Origins we always allow when present on the incoming request (wildcard matching in Better Auth is flaky for some versions). */
+const explicitEnvOrigins = new Set(
+  [siteUrl, appUrl, vercelUrl, ...additionalOrigins].filter(Boolean) as string[]
+);
+
+function readClientOrigin(request: Request): string | null {
+  const raw = request.headers.get("origin");
+  if (raw && raw !== "null") {
+    try {
+      return new URL(raw).origin;
+    } catch {
+      return null;
+    }
+  }
+  const referer = request.headers.get("referer");
+  if (referer) {
+    try {
+      return new URL(referer).origin;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function originIsExplicitlyConfigured(origin: string): boolean {
+  return explicitEnvOrigins.has(origin);
+}
+
+function originIsAllowedVercelPreview(origin: string): boolean {
+  if (!allowVercelPreviewHosts) return false;
+  try {
+    const { protocol, hostname } = new URL(origin);
+    return protocol === "https:" && hostname.endsWith(".vercel.app");
+  } catch {
+    return false;
+  }
+}
+
+function originIsAllowedLocalDev(origin: string): boolean {
+  if (processEnv?.NODE_ENV === "production") return false;
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (hostname !== "localhost" && hostname !== "127.0.0.1") return false;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Merge static patterns with the actual browser origin on each request.
+ * Convex does not have Vercel's VERCEL_URL at runtime, and `https://*.vercel.app`
+ * does not always match preview URLs across Better Auth releases — that yields 403 INVALID_ORIGIN.
+ */
+async function trustedOriginsForRequest(request: Request | undefined): Promise<string[]> {
+  const merged = new Set<string>(trustedOriginsList);
+  if (request) {
+    const clientOrigin = readClientOrigin(request);
+    if (clientOrigin) {
+      if (
+        originIsExplicitlyConfigured(clientOrigin) ||
+        originIsAllowedVercelPreview(clientOrigin) ||
+        originIsAllowedLocalDev(clientOrigin)
+      ) {
+        merged.add(clientOrigin);
+      } else if (processEnv?.DEBUG_AUTH_ORIGINS === "1") {
+        console.log("Auth rejected client origin (not merged):", clientOrigin);
+      }
+    }
+  }
+  return Array.from(merged);
+}
+
 const dynamicProtocol =
   fallbackBaseUrl.startsWith("http://") && !fallbackBaseUrl.startsWith("https://")
     ? ("auto" as const)
@@ -128,7 +202,7 @@ export const authComponent = createClient<DataModel>(authComponentApi);
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
     baseURL: betterAuthBaseUrl,
-    trustedOrigins: trustedOriginsList,
+    trustedOrigins: trustedOriginsForRequest,
     database: authComponent.adapter(ctx),
     // Configure simple, non-verified email/password to get started for admins
     emailAndPassword: {
