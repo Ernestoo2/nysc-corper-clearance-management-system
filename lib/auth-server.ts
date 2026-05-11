@@ -1,13 +1,26 @@
 import { convexBetterAuthNextJs } from "@convex-dev/better-auth/nextjs";
 
+function normalizeOrigin(value: string | null | undefined) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return undefined;
+  try {
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      return new URL(trimmed).origin;
+    }
+    return new URL(`https://${trimmed}`).origin;
+  } catch {
+    return undefined;
+  }
+}
+
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL ?? process.env.CONVEX_URL;
 const vercelUrlRaw = process.env.VERCEL_URL ?? process.env.NEXT_PUBLIC_VERCEL_URL;
-const inferredAppUrl = vercelUrlRaw ? `https://${vercelUrlRaw}` : undefined;
+const inferredAppUrl = normalizeOrigin(vercelUrlRaw);
 const convexSiteUrl =
-  process.env.NEXT_PUBLIC_CONVEX_SITE_URL ??
-  process.env.CONVEX_SITE_URL ??
-  process.env.NEXT_PUBLIC_APP_URL ??
-  process.env.APP_URL ??
+  normalizeOrigin(process.env.NEXT_PUBLIC_CONVEX_SITE_URL) ??
+  normalizeOrigin(process.env.CONVEX_SITE_URL) ??
+  normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL) ??
+  normalizeOrigin(process.env.APP_URL) ??
   inferredAppUrl;
 
 if (!convexUrl) {

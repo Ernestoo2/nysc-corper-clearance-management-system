@@ -14,16 +14,40 @@ type GlobalWithProcess = typeof globalThis & {
 };
 
 const processEnv = (globalThis as GlobalWithProcess).process?.env;
-const siteUrl = processEnv?.NEXT_PUBLIC_CONVEX_SITE_URL ?? processEnv?.CONVEX_SITE_URL ?? processEnv?.SITE_URL ?? processEnv?.NEXT_PUBLIC_SITE_URL;
-const appUrl = processEnv?.NEXT_PUBLIC_APP_URL ?? processEnv?.APP_URL ?? processEnv?.NEXT_PUBLIC_SITE_URL ?? processEnv?.SITE_URL;
+
+function normalizeOrigin(value: string | null | undefined) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return undefined;
+  try {
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      return new URL(trimmed).origin;
+    }
+    return new URL(`https://${trimmed}`).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+const siteUrl = normalizeOrigin(
+  processEnv?.NEXT_PUBLIC_CONVEX_SITE_URL ??
+    processEnv?.CONVEX_SITE_URL ??
+    processEnv?.SITE_URL ??
+    processEnv?.NEXT_PUBLIC_SITE_URL
+);
+const appUrl = normalizeOrigin(
+  processEnv?.NEXT_PUBLIC_APP_URL ??
+    processEnv?.APP_URL ??
+    processEnv?.NEXT_PUBLIC_SITE_URL ??
+    processEnv?.SITE_URL
+);
 const vercelUrlRaw = processEnv?.VERCEL_URL ?? processEnv?.NEXT_PUBLIC_VERCEL_URL;
-const vercelUrl = vercelUrlRaw ? `https://${vercelUrlRaw}` : undefined;
+const vercelUrl = normalizeOrigin(vercelUrlRaw);
 const additionalOriginsRaw = processEnv?.BETTER_AUTH_TRUSTED_ORIGINS ?? processEnv?.ADDITIONAL_TRUSTED_ORIGINS;
 const additionalOrigins = additionalOriginsRaw
   ? additionalOriginsRaw
       .split(",")
-      .map((origin) => origin.trim())
-      .filter((origin) => origin.length > 0)
+      .map((origin) => normalizeOrigin(origin))
+      .filter((origin): origin is string => Boolean(origin))
   : [];
 const fallbackLocalUrl = processEnv?.NODE_ENV !== "production" ? "http://localhost:3000" : undefined;
 const baseURL = appUrl ?? siteUrl ?? vercelUrl ?? fallbackLocalUrl;
