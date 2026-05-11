@@ -50,25 +50,75 @@ const additionalOrigins = additionalOriginsRaw
       .filter((origin): origin is string => Boolean(origin))
   : [];
 const fallbackLocalUrl = processEnv?.NODE_ENV !== "production" ? "http://localhost:3000" : undefined;
-const baseURL = appUrl ?? siteUrl ?? vercelUrl ?? fallbackLocalUrl;
-if (!baseURL) {
+/** Full URL used when the incoming Host does not match allowedHosts (Better Auth "fallback"). */
+const fallbackBaseUrl = appUrl ?? siteUrl ?? vercelUrl ?? fallbackLocalUrl;
+if (!fallbackBaseUrl) {
   throw new Error(
     "Missing NEXT_PUBLIC_APP_URL, APP_URL, NEXT_PUBLIC_CONVEX_SITE_URL, CONVEX_SITE_URL, SITE_URL, NEXT_PUBLIC_SITE_URL, or VERCEL_URL environment variable in convex/auth.ts"
   );
 }
 
-const trustedOrigins = new Set<string>([baseURL]);
-if (siteUrl) trustedOrigins.add(siteUrl);
-if (appUrl) trustedOrigins.add(appUrl);
-if (vercelUrl) trustedOrigins.add(vercelUrl);
-for (const origin of additionalOrigins) trustedOrigins.add(origin);
+/**
+ * Vercel gives a new *.vercel.app hostname on every preview deployment.
+ * Convex runs this code on Convex servers, so process.env.VERCEL_URL is usually unset there.
+ * Better Auth supports wildcard trusted origins + dynamic baseURL (allowedHosts).
+ * @see https://www.better-auth.com/docs/reference/options (baseURL object, trustedOrigins wildcards)
+ */
+const allowVercelPreviewHosts =
+  processEnv?.AUTH_TRUST_VERCEL_APP !== "0" && processEnv?.AUTH_STATIC_BASE_URL !== "1";
+
+function hostFromOrigin(origin: string | undefined) {
+  if (!origin) return null;
+  try {
+    return new URL(origin).hostname;
+  } catch {
+    return null;
+  }
+}
+
+const allowedHosts = new Set<string>();
+if (allowVercelPreviewHosts) {
+  allowedHosts.add("*.vercel.app");
+}
+for (const origin of [appUrl, siteUrl, vercelUrl].filter(Boolean) as string[]) {
+  const host = hostFromOrigin(origin);
+  if (host) allowedHosts.add(host);
+}
 if (processEnv?.NODE_ENV !== "production") {
-  trustedOrigins.add("http://localhost:3000");
-  trustedOrigins.add("http://127.0.0.1:3000");
+  allowedHosts.add("localhost:*");
+  allowedHosts.add("127.0.0.1:*");
 }
+
+const trustedOriginsList: string[] = [];
+if (allowVercelPreviewHosts) {
+  trustedOriginsList.push("https://*.vercel.app");
+}
+if (siteUrl) trustedOriginsList.push(siteUrl);
+if (appUrl) trustedOriginsList.push(appUrl);
+if (vercelUrl) trustedOriginsList.push(vercelUrl);
+trustedOriginsList.push(...additionalOrigins);
+if (processEnv?.NODE_ENV !== "production") {
+  trustedOriginsList.push("http://localhost:3000", "http://127.0.0.1:3000");
+}
+
 if (processEnv?.DEBUG_AUTH_ORIGINS === "1") {
-  console.log("Trusted origins configured:", Array.from(trustedOrigins));
+  console.log("Auth allowedHosts:", Array.from(allowedHosts));
+  console.log("Auth trustedOrigins:", trustedOriginsList);
 }
+
+const dynamicProtocol =
+  fallbackBaseUrl.startsWith("http://") && !fallbackBaseUrl.startsWith("https://")
+    ? ("auto" as const)
+    : ("https" as const);
+
+const betterAuthBaseUrl =
+  allowVercelPreviewHosts && allowedHosts.size > 0
+    ? {
+        allowedHosts: Array.from(allowedHosts),
+        protocol: dynamicProtocol,
+        fallback: fallbackBaseUrl,
+      }
+    : fallbackBaseUrl;
 
 // The component client has methods needed for integrating Convex with Better Auth,
 // as well as helper methods for general use.
@@ -77,8 +127,8 @@ export const authComponent = createClient<DataModel>(authComponentApi);
 
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
-    baseURL: baseURL,
-    trustedOrigins: Array.from(trustedOrigins),
+    baseURL: betterAuthBaseUrl,
+    trustedOrigins: trustedOriginsList,
     database: authComponent.adapter(ctx),
     // Configure simple, non-verified email/password to get started for admins
     emailAndPassword: {
