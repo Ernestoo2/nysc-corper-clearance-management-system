@@ -57,6 +57,23 @@ async function requireSignedInUser(
     }
 
     const identity = await ctx.auth.getUserIdentity();
+    if (user) {
+        if (identity) {
+            return {
+                ...user,
+                tokenIdentifier: identity.tokenIdentifier,
+            };
+        }
+        const synthetic = String(user.email ?? user.username ?? user.name ?? "").trim();
+        if (synthetic) {
+            return {
+                ...user,
+                tokenIdentifier: `better-auth:${synthetic}`,
+            };
+        }
+        throw new Error("Unauthorized");
+    }
+
     if (!identity) throw new Error("Unauthorized");
     return {
         tokenIdentifier: identity.tokenIdentifier,
@@ -322,6 +339,18 @@ export const listByServiceYear = query({
     },
 });
 
+/** Safe, read-only integration flags for the admin settings panel (no secrets). */
+export const adminPanelDiagnostics = query({
+    args: {},
+    handler: async (ctx) => {
+        await requireAdmin(ctx);
+        const deploymentSyncTokenConfigured = Boolean(
+            String(getEnv("DEPLOYMENT_SYNC_TOKEN") ?? "").trim().length
+        );
+        return { deploymentSyncTokenConfigured };
+    },
+});
+
 export const generateMonthlyFormUploadUrl = mutation({
     args: {},
     handler: async (ctx) => {
@@ -570,13 +599,33 @@ export const create = mutation({
         const user = await requireAdmin(ctx);
         const now = Date.now();
 
+        const callUpNumber = args.callUpNumber.trim().toUpperCase();
+        const stateCode = args.stateCode.trim().toUpperCase();
+        const status = args.status.trim().toUpperCase();
+        const fullName = args.fullName.trim();
+        const batch = args.batch.trim().toUpperCase();
+        const deploymentUnit = args.deploymentUnit.trim();
+
+        if (!callUpNumber) throw new Error("Call-up number is required");
+        if (!fullName) throw new Error("Full name is required");
+
+        const duplicate = await ctx.db
+            .query("corpers")
+            .withIndex("by_call_up_number", (q) => q.eq("callUpNumber", callUpNumber))
+            .unique();
+        if (duplicate) {
+            throw new Error(
+                `A corper with call-up number ${callUpNumber} already exists. Use edit or remove the duplicate first.`
+            );
+        }
+
         const corperId = await ctx.db.insert("corpers", {
-            callUpNumber: args.callUpNumber.trim().toUpperCase(),
-            stateCode: args.stateCode.trim().toUpperCase(),
-            status: args.status.trim().toUpperCase(),
-            fullName: args.fullName.trim(),
-            batch: args.batch.trim().toUpperCase(),
-            deploymentUnit: args.deploymentUnit.trim(),
+            callUpNumber,
+            stateCode,
+            status,
+            fullName,
+            batch,
+            deploymentUnit,
             createdAt: now,
         });
 
@@ -587,7 +636,7 @@ export const create = mutation({
             actorTokenIdentifier: String(user.tokenIdentifier ?? "unknown"),
             actorEmail: user.email ?? null,
             actorUsername: user.username ?? null,
-            summary: `created corper ${args.callUpNumber}`,
+            summary: `created corper ${callUpNumber}`,
         });
 
         return { id: corperId };
@@ -608,13 +657,38 @@ export const update = mutation({
         const user = await requireAdmin(ctx);
         const now = Date.now();
 
+        const existing = await ctx.db.get(args.id);
+        if (!existing) throw new Error("Corper not found");
+
+        const callUpNumber = args.callUpNumber.trim().toUpperCase();
+        const stateCode = args.stateCode.trim().toUpperCase();
+        const status = args.status.trim().toUpperCase();
+        const fullName = args.fullName.trim();
+        const batch = args.batch.trim().toUpperCase();
+        const deploymentUnit = args.deploymentUnit.trim();
+
+        if (!callUpNumber) throw new Error("Call-up number is required");
+        if (!fullName) throw new Error("Full name is required");
+
+        if (callUpNumber !== existing.callUpNumber) {
+            const clash = await ctx.db
+                .query("corpers")
+                .withIndex("by_call_up_number", (q) => q.eq("callUpNumber", callUpNumber))
+                .unique();
+            if (clash && clash._id !== args.id) {
+                throw new Error(
+                    `Another corper already uses call-up number ${callUpNumber}. Choose a different call-up number.`
+                );
+            }
+        }
+
         await ctx.db.patch("corpers", args.id, {
-            callUpNumber: args.callUpNumber.trim().toUpperCase(),
-            stateCode: args.stateCode.trim().toUpperCase(),
-            status: args.status.trim().toUpperCase(),
-            fullName: args.fullName.trim(),
-            batch: args.batch.trim().toUpperCase(),
-            deploymentUnit: args.deploymentUnit.trim(),
+            callUpNumber,
+            stateCode,
+            status,
+            fullName,
+            batch,
+            deploymentUnit,
         });
 
         await ctx.db.insert("corperAuditLogs", {
@@ -624,7 +698,7 @@ export const update = mutation({
             actorTokenIdentifier: String(user.tokenIdentifier ?? "unknown"),
             actorEmail: user.email ?? null,
             actorUsername: user.username ?? null,
-            summary: `updated corper ${args.callUpNumber}`,
+            summary: `updated corper ${callUpNumber}`,
         });
 
         return { ok: true };
@@ -670,26 +744,28 @@ export const seedCorpers = mutation({
             })
         ),
     },
-    handler: async ({ db }, { corpers }) => {
-        // console.log("seedCorpers called with:", corpers.length, "corpers")
-        for (const corper of corpers) {
-            // console.log("Processing corper:", corper.callUpNumber)
-            const existingCorper = await db
+    handler: async (ctx, { corpers: rows }) => {
+        const byCallUp = new Map<string, (typeof rows)[number]>();
+        for (const row of rows) {
+            const key = row.callUpNumber.trim().toUpperCase();
+            if (!key) continue;
+            byCallUp.set(key, { ...row, callUpNumber: key });
+        }
+        const deduped = [...byCallUp.values()];
+
+        for (const corper of deduped) {
+            const existingCorper = await ctx.db
                 .query("corpers")
-                .withIndex("by_call_up_number", (q) =>
-                    q.eq("callUpNumber", corper.callUpNumber)
-                )
+                .withIndex("by_call_up_number", (q) => q.eq("callUpNumber", corper.callUpNumber))
                 .unique();
 
             if (existingCorper) {
-                // console.log("Updating existing corper:", existingCorper._id)
-                await db.patch("corpers", existingCorper._id, corper);
+                await ctx.db.patch("corpers", existingCorper._id, corper);
             } else {
-                // console.log("Inserting new corper:", corper.callUpNumber)
-                await db.insert("corpers", corper);
+                await ctx.db.insert("corpers", corper);
             }
         }
 
-        return { upserted: corpers.length };
+        return { upserted: deduped.length, skippedEmptyCallUp: rows.length - deduped.length };
     },
 });

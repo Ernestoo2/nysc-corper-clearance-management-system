@@ -111,82 +111,113 @@ export default function AdminBulkClearancePage() {
     setIsGenerating(true);
 
     try {
-      const paragraphs: Paragraph[] = [];
-      const formattedIssueDate = formatFormalDate(issueDate);
+        const paragraphs: Paragraph[] = [];
+        const formattedIssueDate = formatFormalDate(issueDate);
+        
+        // Define the header section that should appear at the top of each page
+        const createHeaderSection = (isFirstPage: boolean = false) => {
+           
+            return [
+                new Paragraph({
+                    children: [new TextRun({ text: formattedIssueDate, bold: true, size: 24 })],
+                    spacing: { before: 900, after: 250 },
+                }),
+                new Paragraph({
+                    children: [new TextRun({ text: "The State Coordinator,", size: 24 })],
+                    spacing: { before: 0 },
+                }),
+                new Paragraph({ children: [new TextRun({ text: "N.Y.S.C,", size: 24 })] }),
+                new Paragraph({ children: [new TextRun({ text: "Oyo State,", size: 24 })] }),
+                new Paragraph({
+                    children: [new TextRun({ text: "Nigeria.", size: 24 })],
+                    spacing: { after: 500 },
+                }),
+                new Paragraph({
+                    children: [new TextRun({ text: "Dear Sir,", size: 24 })],
+                    spacing: { after: 260 },
+                }),
+                new Paragraph({
+                    children: [
+                        new TextRun({ text: "Monthly Clearance", bold: true, italics: true, underline: {}, size: 26 }),
+                    ],
+                    spacing: { after: 300 },
+                }),
+            ];
+        };
+        
+        // Define the body content
+        const createBodyContent = (corper: CorperDoc) => {
+            return [
+                new Paragraph({
+                    children: [
+                        new TextRun({ text: "This is to certify that ", size: 24 }),
+                        new TextRun({ text: toTitleCase(corper.fullName), bold: true, size: 24 }),
+                        new TextRun({ text: " with State Code No: ", size: 24 }),
+                        new TextRun({ text: corper.stateCode, bold: true, size: 24 }),
+                        new TextRun({ text: " and NYSC Call-up No: ", size: 24 }),
+                        new TextRun({ text: corper.callUpNumber, bold: true, size: 24 }),
+                        new TextRun({
+                            text: ` has worked satisfactorily for the month of ${monthCovered} and should be paid monthly allowance for the month of ${allowanceMonth}.`,
+                            size: 24,
+                        }),
+                    ],
+                    spacing: { after: 300 },
+                }),
+                new Paragraph({
+                    children: [new TextRun({ text: "Thank you.", size: 24 })],
+                    spacing: { after: 700 },
+                }),
+                new Paragraph({
+                    children: [new TextRun({ text: "A. O. Ayanjompe (Mrs.)", bold: true, size: 24 })],
+                    spacing: { after: 120 },
+                }),
+                new Paragraph({
+                    children: [new TextRun({ text: "Deputy Registrar, HR (Admin/Tech. Est.)", bold: true, size: 22 })],
+                    spacing: { after: 120 },
+                }),
+                new Paragraph({
+                    children: [new TextRun({ text: "For: Registrar", bold: true, italics: true, size: 22 })],
+                }),
+            ];
+        };
 
-      selectedCorpers.forEach((corper, index) => {
-        paragraphs.push(
-          new Paragraph({
-            children: [new TextRun({ text: formattedIssueDate, bold: true, size: 24 })],
-            spacing: { before: 900, after: 250 },
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: "The State Coordinator,", size: 24 })],
-            spacing: { before: 0 },
-          }),
-          new Paragraph({ children: [new TextRun({ text: "N.Y.S.C,", size: 24 })] }),
-          new Paragraph({ children: [new TextRun({ text: "Oyo State,", size: 24 })] }),
-          new Paragraph({
-            children: [new TextRun({ text: "Nigeria.", size: 24 })],
-            spacing: { after: 500 },
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: "Dear Sir,", size: 24 })],
-            spacing: { after: 260 },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Monthly Clearance", bold: true, italics: true, underline: {}, size: 26 }),
-            ],
-            spacing: { after: 300 },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "This is to certify that ", size: 24 }),
-              new TextRun({ text: toTitleCase(corper.fullName), bold: true, size: 24 }),
-              new TextRun({ text: " with State Code No: ", size: 24 }),
-              new TextRun({ text: corper.stateCode, bold: true, size: 24 }),
-              new TextRun({ text: " and NYSC Call-up No: ", size: 24 }),
-              new TextRun({ text: corper.callUpNumber, bold: true, size: 24 }),
-              new TextRun({
-                text: ` has worked satisfactorily for the month of ${monthCovered} and should be paid monthly allowance for the month of ${allowanceMonth}.`,
-                size: 24,
-              }),
-            ],
-            spacing: { after: 300 },
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: "Thank you.", size: 24 })],
-            spacing: { after: 700 },
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: "A. O. Ayanjompe (Mrs.)", bold: true, size: 24 })],
-            spacing: { after: 120 },
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: "Deputy Registrar, HR (Admin/Tech. Est.)", bold: true, size: 22 })],
-            spacing: { after: 120 },
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: "For: Registrar", bold: true, italics: true, size: 22 })],
-          })
-        );
+        selectedCorpers.forEach((corper, index) => {
+            // First page or after page break, we need to add the header section
+            // But ensure we don't add duplicate page breaks
+            if (index === 0) {
+                // First corper on first page with top spacing
+                paragraphs.push(...createHeaderSection(true));
+                paragraphs.push(...createBodyContent(corper));
+            } else {
+                // For subsequent corpers, add page break then header with proper spacing
+                paragraphs.push(new Paragraph({ children: [new PageBreak()] }));
+                paragraphs.push(...createHeaderSection(false));
+                paragraphs.push(...createBodyContent(corper));
+            }
+        });
+        
+        const doc = new Document({
+            sections: [{ 
+                properties: {
+                    page: {
+                        margin: {
+                            top: 3500,     
+                            right: 720,
+                            bottom: 720,
+                            left: 720,
+                        }
+                    }
+                }, 
+                children: paragraphs 
+            }],
+        });
 
-        if (index < selectedCorpers.length - 1) {
-          paragraphs.push(new Paragraph({ children: [new PageBreak()] }));
-        }
-      });
-
-      const doc = new Document({
-        sections: [{ properties: {}, children: paragraphs }],
-      });
-
-      const blob = await Packer.toBlob(doc);
-      saveAs(blob, `nysc-bulk-clearance-${monthCovered.replace(/\s+/g, "-").toLowerCase()}.docx`);
+        const blob = await Packer.toBlob(doc);
+        saveAs(blob, `nysc-bulk-clearance-${monthCovered.replace(/\s+/g, "-").toLowerCase()}.docx`);
     } finally {
-      setIsGenerating(false);
+        setIsGenerating(false);
     }
-  }
+}
 
   async function handlePublishSharedFile() {
     if (!sharedFile || !sharedMonthLabel.trim()) {

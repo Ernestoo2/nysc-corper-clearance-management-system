@@ -63,7 +63,7 @@
       [batch, status, deploymentUnit, searchText]
     );
 
-    const { results, status: queryStatus, loadMore, isLoading } = usePaginatedQuery(
+    const { results, status: queryStatus, loadMore } = usePaginatedQuery(
       api.corpers.list,
       filters,
       { initialNumItems: 25 }
@@ -73,10 +73,13 @@
     const updateCorper = useMutation(api.corpers.update);
     const removeCorper = useMutation(api.corpers.remove);
 
-    const [createOpen, setCreateOpen] = useState(false);
-    const [editOpen, setEditOpen] = useState(false);
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [error, setError] = useState<string>("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [mutationInFlight, setMutationInFlight] = useState<
+    "create" | "update" | "delete" | null
+  >(null);
 
     const [form, setForm] = useState<CorperForm>({
       callUpNumber: "",
@@ -94,66 +97,84 @@
       return null;
     }, []);
 
-    const audit = useQuery(api.corperAudit.listRecent, { limit: 25 });
-    const byServiceYear = useQuery(api.corpers.listByServiceYear, { limit: 5000 });
-    const latestSharedForm = useQuery(api.corpers.getLatestSharedMonthlyForm, {});
+  const audit = useQuery(api.corperAudit.listRecent, { limit: 25 });
+  const byServiceYear = useQuery(api.corpers.listByServiceYear, { limit: 5000 });
+  const latestSharedForm = useQuery(api.corpers.getLatestSharedMonthlyForm, {});
 
-    async function handleCreate() {
-      setError("");
-      try {
-        await createCorper({
-          callUpNumber: form.callUpNumber,
-          fullName: form.fullName,
-          stateCode: form.stateCode,
-          batch: form.batch,
-          deploymentUnit: form.deploymentUnit,
-          status: form.status,
-        });
-        setCreateOpen(false);
-        setForm({
-          callUpNumber: "",
-          fullName: "",
-          stateCode: "",
-          batch: "",
-          deploymentUnit: "",
-          status: "ACTIVE",
-        });
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Unable to create corper");
-      }
-    }
+  const createCallUpKey = form.callUpNumber.trim().toUpperCase();
+  const existingForCreateCallUp = useQuery(
+    api.corpers.findByCallUp,
+    createOpen && createCallUpKey.length > 0
+      ? { callUpNumber: createCallUpKey }
+      : "skip"
+  );
 
-    async function handleUpdate() {
-      if (!selectedId) return;
-      setError("");
-      try {
-        await updateCorper({
-          id: selectedId,
-          callUpNumber: form.callUpNumber,
-          fullName: form.fullName,
-          stateCode: form.stateCode,
-          batch: form.batch,
-          deploymentUnit: form.deploymentUnit,
-          status: form.status,
-        });
-        setEditOpen(false);
-        setSelectedId(null);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Unable to update corper");
-      }
+  async function handleCreate() {
+    if (mutationInFlight) return;
+    setMutationInFlight("create");
+    setError("");
+    try {
+      await createCorper({
+        callUpNumber: form.callUpNumber,
+        fullName: form.fullName,
+        stateCode: form.stateCode,
+        batch: form.batch,
+        deploymentUnit: form.deploymentUnit,
+        status: form.status,
+      });
+      setCreateOpen(false);
+      setForm({
+        callUpNumber: "",
+        fullName: "",
+        stateCode: "",
+        batch: "",
+        deploymentUnit: "",
+        status: "ACTIVE",
+      });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Unable to create corper");
+    } finally {
+      setMutationInFlight(null);
     }
+  }
 
-    async function handleDelete() {
-      if (!selectedId) return;
-      setError("");
-      try {
-        await removeCorper({ id: selectedId });
-        setDeleteOpen(false);
-        setSelectedId(null);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Unable to delete corper");
-      }
+  async function handleUpdate() {
+    if (!selectedId || mutationInFlight) return;
+    setMutationInFlight("update");
+    setError("");
+    try {
+      await updateCorper({
+        id: selectedId,
+        callUpNumber: form.callUpNumber,
+        fullName: form.fullName,
+        stateCode: form.stateCode,
+        batch: form.batch,
+        deploymentUnit: form.deploymentUnit,
+        status: form.status,
+      });
+      setEditOpen(false);
+      setSelectedId(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Unable to update corper");
+    } finally {
+      setMutationInFlight(null);
     }
+  }
+
+  async function handleDelete() {
+    if (!selectedId || mutationInFlight) return;
+    setMutationInFlight("delete");
+    setError("");
+    try {
+      await removeCorper({ id: selectedId });
+      setDeleteOpen(false);
+      setSelectedId(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Unable to delete corper");
+    } finally {
+      setMutationInFlight(null);
+    }
+  }
 
     return (
       <div className="min-h-screen bg-slate-50 p-6">
@@ -234,14 +255,28 @@
                         placeholder="ICT Unit"
                       />
                     </div>
+                    {existingForCreateCallUp ? (
+                      <p className="text-sm text-amber-700">
+                        This call-up number is already in the registry. Edit that record instead of creating
+                        a duplicate.
+                      </p>
+                    ) : null}
                     {error ? <p className="text-sm text-red-600">{error}</p> : null}
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setCreateOpen(false)}>
                       Cancel
                     </Button>
-                    <Button onClick={handleCreate} disabled={isLoading}>
-                      Create
+                    <Button
+                      onClick={handleCreate}
+                      disabled={
+                        mutationInFlight !== null ||
+                        !!existingForCreateCallUp ||
+                        !createCallUpKey ||
+                        !form.fullName.trim()
+                      }
+                    >
+                      {mutationInFlight === "create" ? "Creating…" : "Create"}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -451,7 +486,12 @@
                                 <Button variant="outline" onClick={() => setEditOpen(false)}>
                                   Cancel
                                 </Button>
-                                <Button onClick={handleUpdate}>Save</Button>
+                                <Button
+                                  onClick={handleUpdate}
+                                  disabled={mutationInFlight !== null}
+                                >
+                                  {mutationInFlight === "update" ? "Saving…" : "Save"}
+                                </Button>
                               </DialogFooter>
                             </DialogContent>
                           </Dialog>
@@ -488,8 +528,12 @@
                                 <Button variant="outline" onClick={() => setDeleteOpen(false)}>
                                   Cancel
                                 </Button>
-                                <Button variant="destructive" onClick={handleDelete}>
-                                  Delete
+                                <Button
+                                  variant="destructive"
+                                  onClick={handleDelete}
+                                  disabled={mutationInFlight !== null}
+                                >
+                                  {mutationInFlight === "delete" ? "Deleting…" : "Delete"}
                                 </Button>
                               </DialogFooter>
                             </DialogContent>
@@ -510,7 +554,7 @@
               </Table>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="rounded-xl border border-slate-200 bg-white lg:overflow-y-auto h-300 shadow-sm">
               <div className="border-b border-slate-200 px-4 py-3">
                 <h2 className="text-sm font-semibold text-slate-700">Recent changes</h2>
               </div>

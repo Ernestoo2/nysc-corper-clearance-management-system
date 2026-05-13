@@ -33,7 +33,7 @@ export default function HomePage() {
               Login
             </Link>
             <Link
-              href="/signup"
+              href="/admin-signup"
               className="rounded-md px-4 py-2 text-sm font-semibold text-slate-900 transition hover:opacity-90"
               style={{ backgroundColor: palette.accent }}
             >

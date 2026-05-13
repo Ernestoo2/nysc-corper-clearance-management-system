@@ -24,10 +24,10 @@ export default function AdminPanel() {
                         <p className="text-gray-600">Generate registry and summary reports</p>
                     </Link>
 
-                    <div className="bg-white p-6 rounded-lg shadow-sm border">
+                    <Link href="/panel/settings" className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
                         <h2 className="text-xl font-semibold mb-4">Settings</h2>
-                        <p className="text-gray-600">System configuration</p>
-                    </div>
+                        <p className="text-gray-600">Environment and integration status</p>
+                    </Link>
                 </div>
             </div>
         </div>
