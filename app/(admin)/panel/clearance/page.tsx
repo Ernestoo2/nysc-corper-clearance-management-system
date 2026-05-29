@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
-import { Document, Packer, PageBreak, Paragraph, TextRun } from "docx";
 import { saveAs } from "file-saver";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { corperToClearanceMergeFields } from "@/lib/letters/corperMergeFields";
+import { fetchAndMergeBulkClearance, formatDocxMergeError } from "@/lib/letters/merge";
 
 type CorperDoc = Doc<"corpers">;
 
@@ -32,22 +33,6 @@ function nextMonth(date: Date) {
   return next;
 }
 
-function dayWithOrdinal(day: number) {
-  const mod10 = day % 10;
-  const mod100 = day % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${day}st`;
-  if (mod10 === 2 && mod100 !== 12) return `${day}nd`;
-  if (mod10 === 3 && mod100 !== 13) return `${day}rd`;
-  return `${day}th`;
-}
-
-function formatFormalDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const month = date.toLocaleString("en-US", { month: "long" });
-  return `${dayWithOrdinal(date.getDate())} ${month}, ${date.getFullYear()}.`;
-}
-
 export default function AdminBulkClearancePage() {
   const [monthCovered, setMonthCovered] = useState("");
   const [allowanceMonth, setAllowanceMonth] = useState("");
@@ -57,9 +42,6 @@ export default function AdminBulkClearancePage() {
   const [sharedMonthLabel, setSharedMonthLabel] = useState("");
   const [sharedFile, setSharedFile] = useState<File | null>(null);
   const [isPublishingSharedFile, setIsPublishingSharedFile] = useState(false);
-  const [unitName, setUnitName] = useState("");
-  const [headOfUnit, setHeadOfUnit] = useState("");
-  const [isSavingUnitHead, setIsSavingUnitHead] = useState(false);
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
@@ -81,10 +63,11 @@ export default function AdminBulkClearancePage() {
     [corpers]
   );
   const latestSharedForm = useQuery(api.corpers.getLatestSharedMonthlyForm, {});
-  const deploymentHeads = useQuery(api.corpers.listDeploymentUnitHeads, {});
+  const clearanceTemplate = useQuery(api.letters.getActiveTemplate, {
+    letterType: "clearance",
+  });
   const generateUploadUrl = useMutation(api.corpers.generateMonthlyFormUploadUrl);
   const publishSharedForm = useMutation(api.corpers.publishSharedMonthlyForm);
-  const saveUnitHead = useMutation(api.corpers.upsertDeploymentUnitHead);
   const selectedCorpers = useMemo(
     () => activeCorpers.filter((row) => selected[row._id]),
     [activeCorpers, selected]
@@ -108,116 +91,38 @@ export default function AdminBulkClearancePage() {
 
   async function generateBulkDocx() {
     if (selectedCorpers.length === 0) return;
+    const templateUrl = clearanceTemplate?.downloadUrl;
+    if (!templateUrl) {
+      setFeedback("Upload an active clearance template under Letter templates.");
+      return;
+    }
+
     setIsGenerating(true);
+    setFeedback("");
 
     try {
-        const paragraphs: Paragraph[] = [];
-        const formattedIssueDate = formatFormalDate(issueDate);
-        
-        // Define the header section that should appear at the top of each page
-        const createHeaderSection = (isFirstPage: boolean = false) => {
-           
-            return [
-                new Paragraph({
-                    children: [new TextRun({ text: formattedIssueDate, bold: true, size: 24 })],
-                    spacing: { before: 900, after: 250 },
-                }),
-                new Paragraph({
-                    children: [new TextRun({ text: "The State Coordinator,", size: 24 })],
-                    spacing: { before: 0 },
-                }),
-                new Paragraph({ children: [new TextRun({ text: "N.Y.S.C,", size: 24 })] }),
-                new Paragraph({ children: [new TextRun({ text: "Oyo State,", size: 24 })] }),
-                new Paragraph({
-                    children: [new TextRun({ text: "Nigeria.", size: 24 })],
-                    spacing: { after: 500 },
-                }),
-                new Paragraph({
-                    children: [new TextRun({ text: "Dear Sir,", size: 24 })],
-                    spacing: { after: 260 },
-                }),
-                new Paragraph({
-                    children: [
-                        new TextRun({ text: "Monthly Clearance", bold: true, italics: true, underline: {}, size: 26 }),
-                    ],
-                    spacing: { after: 300 },
-                }),
-            ];
-        };
-        
-        // Define the body content
-        const createBodyContent = (corper: CorperDoc) => {
-            return [
-                new Paragraph({
-                    children: [
-                        new TextRun({ text: "This is to certify that ", size: 24 }),
-                        new TextRun({ text: toTitleCase(corper.fullName), bold: true, size: 24 }),
-                        new TextRun({ text: " with State Code No: ", size: 24 }),
-                        new TextRun({ text: corper.stateCode, bold: true, size: 24 }),
-                        new TextRun({ text: " and NYSC Call-up No: ", size: 24 }),
-                        new TextRun({ text: corper.callUpNumber, bold: true, size: 24 }),
-                        new TextRun({
-                            text: ` has worked satisfactorily for the month of ${monthCovered} and should be paid monthly allowance for the month of ${allowanceMonth}.`,
-                            size: 24,
-                        }),
-                    ],
-                    spacing: { after: 300 },
-                }),
-                new Paragraph({
-                    children: [new TextRun({ text: "Thank you.", size: 24 })],
-                    spacing: { after: 700 },
-                }),
-                new Paragraph({
-                    children: [new TextRun({ text: "A. O. Ayanjompe (Mrs.)", bold: true, size: 24 })],
-                    spacing: { after: 120 },
-                }),
-                new Paragraph({
-                    children: [new TextRun({ text: "Deputy Registrar, HR (Admin/Tech. Est.)", bold: true, size: 22 })],
-                    spacing: { after: 120 },
-                }),
-                new Paragraph({
-                    children: [new TextRun({ text: "For: Registrar", bold: true, italics: true, size: 22 })],
-                }),
-            ];
-        };
+      const mergeRows = selectedCorpers.map((row) =>
+        corperToClearanceMergeFields(
+          {
+            fullName: row.fullName,
+            callUpNumber: row.callUpNumber,
+            stateCode: row.stateCode,
+            batch: row.batch,
+            deploymentUnit: row.deploymentUnit,
+          },
+          { issueDate, monthCovered, allowanceMonth }
+        )
+      );
 
-        selectedCorpers.forEach((corper, index) => {
-            // First page or after page break, we need to add the header section
-            // But ensure we don't add duplicate page breaks
-            if (index === 0) {
-                // First corper on first page with top spacing
-                paragraphs.push(...createHeaderSection(true));
-                paragraphs.push(...createBodyContent(corper));
-            } else {
-                // For subsequent corpers, add page break then header with proper spacing
-                paragraphs.push(new Paragraph({ children: [new PageBreak()] }));
-                paragraphs.push(...createHeaderSection(false));
-                paragraphs.push(...createBodyContent(corper));
-            }
-        });
-        
-        const doc = new Document({
-            sections: [{ 
-                properties: {
-                    page: {
-                        margin: {
-                            top: 3500,     
-                            right: 720,
-                            bottom: 720,
-                            left: 720,
-                        }
-                    }
-                }, 
-                children: paragraphs 
-            }],
-        });
-
-        const blob = await Packer.toBlob(doc);
-        saveAs(blob, `nysc-bulk-clearance-${monthCovered.replace(/\s+/g, "-").toLowerCase()}.docx`);
+      const blob = await fetchAndMergeBulkClearance(templateUrl, mergeRows);
+      saveAs(blob, `nysc-bulk-clearance-${monthCovered.replace(/\s+/g, "-").toLowerCase()}.docx`);
+      setFeedback(`Generated ${selectedCorpers.length} letter(s).`);
+    } catch (error) {
+      setFeedback(formatDocxMergeError(error));
     } finally {
-        setIsGenerating(false);
+      setIsGenerating(false);
     }
-}
+  }
 
   async function handlePublishSharedFile() {
     if (!sharedFile || !sharedMonthLabel.trim()) {
@@ -250,28 +155,6 @@ export default function AdminBulkClearancePage() {
       setFeedback(error instanceof Error ? error.message : "Unable to publish shared monthly form");
     } finally {
       setIsPublishingSharedFile(false);
-    }
-  }
-
-  async function handleSaveUnitHead() {
-    if (!unitName.trim()) {
-      setFeedback("Deployment unit is required.");
-      return;
-    }
-    setIsSavingUnitHead(true);
-    setFeedback("");
-    try {
-      await saveUnitHead({
-        deploymentUnit: unitName.trim(),
-        headOfUnit: headOfUnit.trim() || undefined,
-      });
-      setFeedback("Head of unit updated.");
-      setUnitName("");
-      setHeadOfUnit("");
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Unable to save head of unit");
-    } finally {
-      setIsSavingUnitHead(false);
     }
   }
 
@@ -331,53 +214,26 @@ export default function AdminBulkClearancePage() {
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-800">Deployment Unit Heads (Optional)</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Supports the dualized mode by mapping each deployment unit to an optional HOD name.
-          </p>
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="grid gap-1">
-              <Label htmlFor="unit-name">Deployment unit</Label>
-              <Input
-                id="unit-name"
-                value={unitName}
-                onChange={(e) => setUnitName(e.target.value)}
-                placeholder="ICT Unit"
-              />
-            </div>
-            <div className="grid gap-1 md:col-span-2">
-              <Label htmlFor="head-of-unit">Head of unit (optional)</Label>
-              <Input
-                id="head-of-unit"
-                value={headOfUnit}
-                onChange={(e) => setHeadOfUnit(e.target.value)}
-                placeholder="Dr. John Doe"
-              />
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button onClick={handleSaveUnitHead} disabled={isSavingUnitHead}>
-              {isSavingUnitHead ? "Saving..." : "Save Unit Head"}
-            </Button>
-          </div>
-          <div className="mt-4 divide-y divide-slate-100 rounded-lg border border-slate-200">
-            {(deploymentHeads ?? []).map((row) => (
-              <div key={row._id} className="flex items-center justify-between px-3 py-2 text-sm">
-                <span className="font-medium text-slate-700">{row.deploymentUnit}</span>
-                <span className="text-slate-600">{row.headOfUnit ?? "Not set"}</span>
-              </div>
-            ))}
-            {(deploymentHeads ?? []).length === 0 ? (
-              <div className="px-3 py-3 text-sm text-slate-500">No deployment-unit heads configured yet.</div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-base font-semibold text-slate-800">Bulk Clearance Letter Generation</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Generate monthly clearance letters for selected corpers.
+            Merges your active clearance .docx once per selected corper and combines pages.
+            Use placeholders like <code className="text-xs">{"{formattedIssueDate}"}</code>,{" "}
+            <code className="text-xs">{"{fullName}"}</code>,{" "}
+            <code className="text-xs">{"{stateCode}"}</code>,{" "}
+            <code className="text-xs">{"{callUpNumber}"}</code>,{" "}
+            <code className="text-xs">{"{monthCovered}"}</code>,{" "}
+            <code className="text-xs">{"{allowanceMonth}"}</code>. No {"{#corpers}"} loop needed.
+            Keep top margin ~3500 twips for letterhead.
           </p>
+          {clearanceTemplate ? (
+            <p className="mt-1 text-xs text-slate-500">
+              Active template: {clearanceTemplate.name} (v{clearanceTemplate.version})
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-amber-700">
+              No active clearance template — upload one under Letter templates.
+            </p>
+          )}
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="grid gap-1">
               <Label htmlFor="month-covered">Month worked satisfactorily</Label>
@@ -414,7 +270,12 @@ export default function AdminBulkClearancePage() {
             <Button variant="outline" onClick={clearSelection}>
               Clear selection
             </Button>
-            <Button onClick={generateBulkDocx} disabled={selectedCorpers.length === 0 || isGenerating}>
+            <Button
+              onClick={generateBulkDocx}
+              disabled={
+                selectedCorpers.length === 0 || isGenerating || !clearanceTemplate?.downloadUrl
+              }
+            >
               {isGenerating
                 ? "Generating..."
                 : `Generate .docx (${selectedCorpers.length} selected)`}

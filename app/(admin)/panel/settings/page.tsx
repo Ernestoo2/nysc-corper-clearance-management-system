@@ -1,9 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useConvexAuth, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 function EnvRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -17,12 +14,6 @@ function EnvRow({ label, value, hint }: { label: string; value: string; hint?: s
 }
 
 export default function AdminSettingsPage() {
-  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
-  const diagnostics = useQuery(
-    api.corpers.adminPanelDiagnostics,
-    isAuthenticated && !authLoading ? {} : "skip"
-  );
-
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL ?? "";
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
@@ -63,29 +54,6 @@ export default function AdminSettingsPage() {
               hint="Used for auth redirects and Better Auth site URL. Set NEXT_PUBLIC_APP_URL or NEXT_PUBLIC_CONVEX_SITE_URL in .env."
             />
           </div>
-        </section>
-
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-800">Convex backend</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Flags from the Convex environment (not the Next.js server). Useful for deployment-unit sync
-            and ops.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="text-sm text-slate-700">Deployment sync token</span>
-            {diagnostics === undefined ? (
-              <Badge variant="secondary">Checking…</Badge>
-            ) : diagnostics.deploymentSyncTokenConfigured ? (
-              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Configured</Badge>
-            ) : (
-              <Badge variant="destructive">Not set</Badge>
-            )}
-          </div>
-          <p className="mt-3 text-xs text-slate-500">
-            Set <code className="rounded bg-slate-100 px-1">DEPLOYMENT_SYNC_TOKEN</code> in the Convex
-            dashboard for <code className="rounded bg-slate-100 px-1">upsertDeploymentUnitHeadFromPush</code>{" "}
-            and the deployment-units sync API. Never commit the real token to git.
-          </p>
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">

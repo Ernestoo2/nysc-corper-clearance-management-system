@@ -33,7 +33,7 @@ Built with **Next.js**, **Convex** (realtime backend), and **Better Auth** (emai
 | `/panel/corpers` | Paginated registry with filters (batch, status, deployment unit, call-up search). Create, edit, and delete corpers with **duplicate call-up protection** and **mutation in-flight guards**. Recent **audit log** sidebar. Grouped view by service year. Download link for latest shared monthly form. |
 | `/panel/clearance` | Select active corpers; generate **bulk clearance DOCX** (month covered, allowance month, issue date). Upload and publish a **shared monthly form** for all corpers. Manage **deployment unit** names and **head of unit**. |
 | `/panel/reports` | Summary counts by status, batch, and deployment unit; export registry and summary **CSV**. |
-| `/panel/settings` | Read-only deployment diagnostics (Convex URL, app URL, deployment sync token status) and registry behaviour notes. |
+| `/panel/settings` | Read-only deployment diagnostics (Convex URL, app URL) and registry behaviour notes. |
 
 ### Corper portal (`/dashboard`)
 
@@ -48,7 +48,6 @@ Built with **Next.js**, **Convex** (realtime backend), and **Better Auth** (emai
 - **Admin-only** mutations and sensitive queries (`requireAdmin`).
 - **Audit log** entries for corper create, update, and delete.
 - **CSV seeding** upserts by call-up number; dedupes rows within each batch.
-- Optional **`DEPLOYMENT_SYNC_TOKEN`** on Convex for push sync of unit heads (never exposed in the UI).
 
 ### APIs (`app/api`)
 
@@ -57,7 +56,6 @@ Built with **Next.js**, **Convex** (realtime backend), and **Better Auth** (emai
 | `/api/auth/[...all]` | Better Auth handler (Convex integration). |
 | `/api/auth/provision/corpers` | Bulk provision corper auth accounts from registry data. |
 | `/api/corpers/verify` | `POST` — verify call-up number + state code against the registry. |
-| `/api/deployment-units/sync` | Push deployment unit / head-of-unit updates (token-protected). |
 
 ### UX
 
@@ -264,13 +262,13 @@ app/
   (admin)/          # Admin layout + panel routes
   (auth)/           # Login, admin signup, corper signup
   (corper)/         # Corper dashboard
-  api/              # Auth, verify, provision, deployment sync
+  api/              # Auth, verify, provision
   page.tsx          # Public landing
 components/
   route-loading.tsx # Shared loading UI for route segments
   ui/               # shadcn components
 convex/
-  schema.ts         # corpers, corperAuditLogs, deploymentUnits, monthlyClearanceForms
+  schema.ts         # corpers, corperAuditLogs, monthlyClearanceForms
   corpers.ts        # Registry, clearance, reports, seed
   corperAudit.ts    # Audit log queries
   auth.ts           # Better Auth + Convex component
@@ -316,13 +314,6 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Optional — batch size for seed script (default 50)
 # SEED_BATCH_SIZE=50
-```
-
-**Convex dashboard** (Settings → Environment variables), for backend-only values:
-
-```env
-# Optional — protects deployment-units push sync API
-DEPLOYMENT_SYNC_TOKEN=your-secret-token
 ```
 
 Auth-related Convex vars (`NEXT_PUBLIC_APP_URL`, `CONVEX_SITE_URL`, etc.) are documented in `convex/auth.ts` if you deploy to Vercel previews.
@@ -379,7 +370,7 @@ See **[Walkthrough: registry-first security and shared monthly forms](#walkthrou
 - [ ] Corper: signup with **matching** call-up + state code → `/dashboard` **Ready** after HR publishes form.
 - [ ] Admin: publish a monthly form at `/panel/clearance` → corper dashboard updates (month label + download).
 - [ ] Admin: export a report CSV at `/panel/reports`.
-- [ ] Admin: check `/panel/settings` for URL and sync-token diagnostics.
+- [ ] Admin: check `/panel/settings` for URL diagnostics.
 
 ---
 
@@ -402,7 +393,6 @@ See **[Walkthrough: registry-first security and shared monthly forms](#walkthrou
 |-------|---------|
 | `corpers` | Registry: call-up, state code, name, batch, status, deployment unit |
 | `corperAuditLogs` | Who changed what and when |
-| `deploymentUnits` | Unit name + optional head of unit |
 | `monthlyClearanceForms` | Shared HR form file per month (Convex storage) |
 
 Indexes support filtering by call-up, batch, status, deployment unit, and compound filters for admin list views.

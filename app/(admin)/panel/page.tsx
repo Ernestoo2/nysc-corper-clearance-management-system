@@ -19,6 +19,11 @@ export default function AdminPanel() {
                         <p className="text-gray-600">Bulk monthly clearance generation</p>
                     </Link>
 
+                    <Link href="/panel/letters/templates" className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
+                        <h2 className="text-xl font-semibold mb-4">Letter templates</h2>
+                        <p className="text-gray-600">Upload DOCX templates and test merge</p>
+                    </Link>
+
                     <Link href="/panel/reports" className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
                         <h2 className="text-xl font-semibold mb-4">Reports</h2>
                         <p className="text-gray-600">Generate registry and summary reports</p>

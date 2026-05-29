@@ -26,6 +26,8 @@
     TableHeader,
     TableRow,
   } from "@/components/ui/table";
+  import { CorperAcceptanceLetterDialog } from "@/components/letters/CorperAcceptanceLetterDialog";
+  import { CorperPostingLetterDialog } from "@/components/letters/CorperPostingLetterDialog";
 
   type CorperForm = {
     callUpNumber: string;
@@ -33,6 +35,7 @@
     stateCode: string;
     batch: string;
     deploymentUnit: string;
+    headOfUnit: string;
     status: string;
   };
 
@@ -77,6 +80,7 @@
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string>("");
+  const [createNotice, setCreateNotice] = useState<string>("");
   const [mutationInFlight, setMutationInFlight] = useState<
     "create" | "update" | "delete" | null
   >(null);
@@ -87,15 +91,11 @@
       stateCode: "",
       batch: "",
       deploymentUnit: "",
+      headOfUnit: "",
       status: "ACTIVE",
     });
 
     const [selectedId, setSelectedId] = useState<Id<"corpers"> | null>(null);
-
-    const recentChanges = useMemo(() => {
-      // Lazy load below via separate query to keep this page snappy; placeholder here.
-      return null;
-    }, []);
 
   const audit = useQuery(api.corperAudit.listRecent, { limit: 25 });
   const byServiceYear = useQuery(api.corpers.listByServiceYear, { limit: 5000 });
@@ -113,15 +113,28 @@
     if (mutationInFlight) return;
     setMutationInFlight("create");
     setError("");
+    setCreateNotice("");
     try {
-      await createCorper({
+      const result = await createCorper({
         callUpNumber: form.callUpNumber,
         fullName: form.fullName,
         stateCode: form.stateCode,
         batch: form.batch,
         deploymentUnit: form.deploymentUnit,
         status: form.status,
+        headOfUnit: form.headOfUnit || undefined,
       });
+      const parts: string[] = ["Corper created."];
+      if (result.acceptanceIssuanceId) {
+        parts.push("Draft acceptance ready (Acceptance).");
+      }
+      if (result.postingIssuanceId) {
+        parts.push("Draft posting ready (Posting).");
+      }
+      if (!result.acceptanceIssuanceId && !result.postingIssuanceId) {
+        parts.push("Upload letter templates under Letter templates to auto-generate drafts.");
+      }
+      setCreateNotice(parts.join(" "));
       setCreateOpen(false);
       setForm({
         callUpNumber: "",
@@ -129,6 +142,7 @@
         stateCode: "",
         batch: "",
         deploymentUnit: "",
+        headOfUnit: "",
         status: "ACTIVE",
       });
     } catch (e: unknown) {
@@ -143,7 +157,7 @@
     setMutationInFlight("update");
     setError("");
     try {
-      await updateCorper({
+      const result = await updateCorper({
         id: selectedId,
         callUpNumber: form.callUpNumber,
         fullName: form.fullName,
@@ -151,7 +165,13 @@
         batch: form.batch,
         deploymentUnit: form.deploymentUnit,
         status: form.status,
+        headOfUnit: form.headOfUnit || undefined,
       });
+      if (result.postingIssuanceId) {
+        setCreateNotice(
+          "Deployment updated. New draft posting letter created — open Posting on the row."
+        );
+      }
       setEditOpen(false);
       setSelectedId(null);
     } catch (e: unknown) {
@@ -188,6 +208,9 @@
               <Button asChild variant="outline">
                 <Link href="/panel">Back to Panel</Link>
               </Button>
+              {createNotice ? (
+                <p className="text-sm text-emerald-800 max-w-md">{createNotice}</p>
+              ) : null}
 
               <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                 <DialogTrigger asChild>
@@ -253,6 +276,15 @@
                         value={form.deploymentUnit}
                         onChange={(e) => setForm((f) => ({ ...f, deploymentUnit: e.target.value }))}
                         placeholder="ICT Unit"
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label htmlFor="create-hod">Head of unit (optional)</Label>
+                      <Input
+                        id="create-hod"
+                        value={form.headOfUnit}
+                        onChange={(e) => setForm((f) => ({ ...f, headOfUnit: e.target.value }))}
+                        placeholder="Dr. John Doe"
                       />
                     </div>
                     {existingForCreateCallUp ? (
@@ -381,6 +413,7 @@
                     <TableHead>Batch</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Deployment</TableHead>
+                    <TableHead>Head of Unit</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -395,9 +428,12 @@
                         <Badge variant="secondary">{row.status}</Badge>
                       </TableCell>
                       <TableCell>{row.deploymentUnit}</TableCell>
+                      <TableCell>{row.headOfUnit ?? "-"}</TableCell>
                       <TableCell className="text-xs text-slate-600">{formatDate(row.createdAt)}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CorperAcceptanceLetterDialog corper={row} />
+                          <CorperPostingLetterDialog corper={row} />
                           <Dialog
                             open={editOpen && selectedId === row._id}
                             onOpenChange={(open) => {
@@ -418,6 +454,7 @@
                                     stateCode: row.stateCode ?? "",
                                     batch: row.batch ?? "",
                                     deploymentUnit: row.deploymentUnit ?? "",
+                                    headOfUnit: row.headOfUnit ?? "",
                                     status: row.status ?? "ACTIVE",
                                   });
                                   setEditOpen(true);
@@ -477,6 +514,15 @@
                                     value={form.deploymentUnit}
                                     onChange={(e) =>
                                       setForm((f) => ({ ...f, deploymentUnit: e.target.value }))
+                                    }
+                                  />
+                                </div>
+                                <div className="grid gap-1">
+                                  <Label>Head of unit (optional)</Label>
+                                  <Input
+                                    value={form.headOfUnit}
+                                    onChange={(e) =>
+                                      setForm((f) => ({ ...f, headOfUnit: e.target.value }))
                                     }
                                   />
                                 </div>
@@ -545,7 +591,7 @@
 
                   {results.length === 0 && queryStatus !== "LoadingFirstPage" ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="p-6 text-center text-sm text-slate-600">
+                      <TableCell colSpan={8} className="p-6 text-center text-sm text-slate-600">
                         No corpers found.
                       </TableCell>
                     </TableRow>
@@ -623,7 +669,6 @@
             </div>
           </div>
 
-          {recentChanges}
         </div>
       </div>
     );
