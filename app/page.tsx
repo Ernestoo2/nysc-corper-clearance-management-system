@@ -63,15 +63,7 @@ export default function HomePage() {
                 style={{ backgroundColor: palette.primary }}
               >
                 Continue to Login
-              </Link>
-              <a
-                href="https://faculty-of-engineering-and-technolo.vercel.app/"
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
-              >
-                View LCU Faculty Page
-              </a>
+              </Link> 
             </div>
           </div>
 
@@ -93,25 +85,6 @@ export default function HomePage() {
                 </li>
               ))}
             </ul>
-          </div>
-        </div>
-      </section>
-
-      <section className="px-6 pb-12 md:px-10 lg:px-16">
-        <div className="mx-auto max-w-6xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <h3 className="mb-5 text-xl font-semibold" style={{ color: palette.primary }}>
-            Color Template (From LCU Web Style)
-          </h3>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {Object.entries(palette).map(([name, value]) => (
-              <div key={name} className="overflow-hidden rounded-lg border border-slate-200">
-                <div className="h-16" style={{ backgroundColor: value }} />
-                <div className="bg-white px-3 py-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{name}</p>
-                  <p className="text-sm font-mono text-slate-800">{value}</p>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
